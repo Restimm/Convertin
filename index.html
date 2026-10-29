@@ -60,6 +60,11 @@ input[type=range]{accent-color:#818cf8;width:100%;height:28px}
 .bar{height:6px;border-radius:99px;background:#161a38;overflow:hidden}
 .bar i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#6366f1,#a855f7,#22d3ee);transition:width .25s ease}
 .foot{border-top:1px solid;border-image:linear-gradient(90deg,transparent,rgba(129,140,248,.45),rgba(34,211,238,.3),transparent) 1}
+.num{width:112px;background:#0d1022;border:1px solid #2a3158;border-radius:10px;padding:.6rem .85rem;font-size:.9rem;color:#e2e8f0;font-family:inherit}
+.lockb{width:40px;height:40px;border-radius:10px;border:1px solid #2a3158;color:#64748b;transition:background .2s,color .2s,border-color .2s}
+.lockb[aria-pressed=true]{background:rgba(99,102,241,.2);color:#c7d2fe;border-color:#4a54a8}
+#p-resize[data-m=crop] #resize-b{cursor:grab;touch-action:none;user-select:none}
+#p-resize[data-m=crop] #resize-b:active{cursor:grabbing}
 :is(button,select,input,label,a):focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -199,6 +204,17 @@ function usm(d,w,h,rad,amt,thr){
   }
 }
 
+const RZ={px:.5,py:.5,r0:0};
+function resample(img,sx,sy,sw,sh,tw,th){
+  let src=img,cx=sx,cy=sy,cw=sw,ch=sh;
+  while(cw>tw*2||ch>th*2){
+    const nw=Math.max(tw,Math.round(cw/2)),nh=Math.max(th,Math.round(ch/2)),c=cvs(nw,nh),x=c.getContext('2d');
+    x.imageSmoothingQuality='high';x.drawImage(src,cx,cy,cw,ch,0,0,nw,nh);
+    src=c;cx=cy=0;cw=nw;ch=nh;
+  }
+  const c=cvs(tw,th),x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(src,cx,cy,cw,ch,0,0,tw,th);
+  return c;
+}
 let bgLib;
 const T=[
  {id:'convert',n:'Convert',auto:1,
@@ -215,6 +231,33 @@ const T=[
     const b=await toBlob(c,t,$('#compress-q').value/100);
     const d=Math.round((1-b.size/f.size)*100);
     return{b,w:c.width,h:c.height,name:base(f)+'-compressed.'+(t==='image/jpeg'?'jpg':'webp'),note:` · ${d>=0?'−':'+'}${Math.abs(d)}%`};
+  }},
+ {id:'resize',n:'Resize',auto:1,
+  ctl:fld('Width (px)','<input id="resize-w" class="num" type="number" min="1" max="10000" inputmode="numeric" placeholder="px">')
+   +'<button id="resize-l" type="button" class="ib lockb" aria-pressed="true" title="Lock ratio" aria-label="Lock ratio"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1"/><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1"/></svg></button>'
+   +fld('Height (px)','<input id="resize-h" class="num" type="number" min="1" max="10000" inputmode="numeric" placeholder="px">')
+   +fld('Mode','<select id="resize-m"><option value="stretch">Stretch</option><option value="crop">Crop</option></select>')
+   +'<div id="resize-zf" class="grow" hidden>'+fld('Zoom <b id="resize-zv" class="text-indigo-300">100%</b>','<input id="resize-z" type="range" min="100" max="300" value="100" oninput="$(\'#resize-zv\').textContent=this.value+\'%\'">')+'</div>'
+   +'<span id="resize-hint" hidden class="w-full text-xs text-slate-500">Drag the preview to reposition</span>',
+  onload(im){
+    $('#resize-w').value=im.naturalWidth;$('#resize-h').value=im.naturalHeight;
+    RZ.r0=im.naturalWidth/im.naturalHeight;RZ.px=RZ.py=.5;$('#resize-z').value=100;$('#resize-zv').textContent='100%';
+  },
+  onclear(){$('#resize-w').value=$('#resize-h').value='';RZ.r0=0},
+  async fn(img,f){
+    const tw=Math.round(+$('#resize-w').value),th=Math.round(+$('#resize-h').value);
+    if(!(tw>=1&&th>=1))return null;
+    if(tw>10000||th>10000||tw*th>64e6)throw new Error('Maximum size is 10000 px or 64 MP');
+    const W=img.naturalWidth,H=img.naturalHeight;let sw=W,sh=H;
+    if($('#resize-m').value==='crop'){
+      const z=+$('#resize-z').value/100,ta=tw/th;
+      if(ta>W/H){sw=W/z;sh=sw/ta}else{sh=H/z;sw=sh*ta}
+    }
+    Object.assign(RZ,{W,H,sw,sh});
+    let c=resample(img,(W-sw)*RZ.px,(H-sh)*RZ.py,sw,sh,tw,th);
+    const t=f.type==='image/jpeg'||f.type==='image/webp'?f.type:'image/png',ext={'image/jpeg':'jpg','image/webp':'webp','image/png':'png'}[t];
+    if(t==='image/jpeg'){const w=cvs(tw,th),x=w.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,tw,th);x.drawImage(c,0,0);c=w}
+    return{b:await toBlob(c,t,.95),w:tw,h:th,name:`${base(f)}-${tw}x${th}.${ext}`};
   }},
  {id:'removebg',n:'Remove Background',btn:'Remove Background',ctl:'',
   async fn(img,f,prog){
@@ -297,7 +340,7 @@ T.forEach(t=>{
     clearTimeout(st.lt);st.lt=setTimeout(()=>load.hidden=false,t.auto?250:0);
     try{
       const r=await t.fn(st.img,st.file,(p,l)=>{if(k===st.n)setP(p,l)});
-      if(k!==st.n)return;
+      if(k!==st.n||!r)return;
       if(st.u)URL.revokeObjectURL(st.u);
       st.u=URL.createObjectURL(r.b);b.src=st.u;b.hidden=false;
       mb.textContent=`${r.w}×${r.h} · ${fmt(r.b.size)}${r.note||''}`;
@@ -305,6 +348,7 @@ T.forEach(t=>{
     }catch(e){if(k===st.n){mb.textContent='';toast(e.message||'Something went wrong')}}
     finally{if(k===st.n){clearTimeout(st.lt);load.hidden=true;if(run)run.disabled=false}}
   };
+  t.go=go;
   dropzone(id,async fs=>{
     const f=fs.find(x=>x.type.startsWith('image/'));if(!f)return toast('Select an image file');
     let im;try{im=await loadImg(f)}catch(e){return toast(e.message)}
@@ -313,6 +357,7 @@ T.forEach(t=>{
     ma.textContent=`${st.img.naturalWidth}×${st.img.naturalHeight} · ${fmt(f.size)}`;
     $('#d-'+id+' span').textContent=f.name;
     if(run)run.disabled=false;
+    if(t.onload)t.onload(im);
     if(t.auto)go();
   });
   if(run)run.onclick=go;
@@ -322,11 +367,31 @@ T.forEach(t=>{
     st.n++;clearTimeout(st.lt);load.hidden=true;
     if(st.img)URL.revokeObjectURL(st.img.src);if(st.u)URL.revokeObjectURL(st.u);
     st.img=st.file=st.u=null;a.hidden=b.hidden=tools.hidden=dl.hidden=true;a.removeAttribute('src');b.removeAttribute('src');
-    ma.textContent=mb.textContent='';$('#d-'+id+' span').textContent=DZ;if(run)run.disabled=true;
+    ma.textContent=mb.textContent='';$('#d-'+id+' span').textContent=DZ;if(run)run.disabled=true;if(t.onclear)t.onclear();
   };
   if(t.auto){let q;$('#p-'+id).addEventListener('input',()=>{clearTimeout(q);q=setTimeout(go,120)})}
 });
 
+(()=>{
+  const w=$('#resize-w'),h=$('#resize-h'),lk=$('#resize-l'),m=$('#resize-m'),pn=$('#p-resize'),rb=$('#resize-b'),tool=T.find(x=>x.id==='resize');
+  const lock=()=>lk.getAttribute('aria-pressed')==='true',cv=v=>Math.min(10000,Math.max(1,Math.round(v))),cl=v=>Math.min(1,Math.max(0,v));
+  w.addEventListener('input',()=>{if(lock()&&RZ.r0&&w.value)h.value=cv(+w.value/RZ.r0)});
+  h.addEventListener('input',()=>{if(lock()&&RZ.r0&&h.value)w.value=cv(+h.value*RZ.r0)});
+  lk.onclick=()=>{const on=!lock();lk.setAttribute('aria-pressed',on);if(on&&RZ.r0&&w.value)h.value=cv(+w.value/RZ.r0);pn.dispatchEvent(new Event('input'))};
+  m.addEventListener('input',()=>{const c=m.value==='crop';$('#resize-zf').hidden=!c;$('#resize-hint').hidden=!c;pn.dataset.m=m.value});
+  let drag=null,run=0,pend=0;
+  const live=async()=>{if(run){pend=1;return}run=1;do{pend=0;await tool.go()}while(pend);run=0};
+  rb.draggable=false;
+  rb.addEventListener('pointerdown',e=>{if(m.value!=='crop'||rb.hidden)return;drag={x:e.clientX,y:e.clientY};rb.setPointerCapture(e.pointerId);e.preventDefault()});
+  rb.addEventListener('pointermove',e=>{
+    if(!drag)return;
+    const k=RZ.sw/rb.getBoundingClientRect().width,dx=(e.clientX-drag.x)*k,dy=(e.clientY-drag.y)*k;drag={x:e.clientX,y:e.clientY};
+    if(RZ.W-RZ.sw>.5)RZ.px=cl(RZ.px-dx/(RZ.W-RZ.sw));
+    if(RZ.H-RZ.sh>.5)RZ.py=cl(RZ.py-dy/(RZ.H-RZ.sh));
+    live();
+  });
+  ['pointerup','pointercancel'].forEach(v=>rb.addEventListener(v,()=>drag=null));
+})();
 const P=[];
 const renderPdf=()=>{
   $('#pdf-list').innerHTML=P.map((it,i)=>`<li class="row"><img src="${it.img.src}" alt="" class="w-11 h-11 rounded-lg object-cover"><div class="min-w-0 grow"><p class="truncate text-sm font-medium">${i+1}. ${esc(it.f.name)}</p><p class="text-xs text-slate-400">${it.img.naturalWidth}×${it.img.naturalHeight} · ${fmt(it.f.size)}</p></div><button class="ib" data-a="u" data-i="${i}" aria-label="Move up">↑</button><button class="ib" data-a="d" data-i="${i}" aria-label="Move down">↓</button><button class="ib" data-a="e" data-i="${i}" aria-label="Edit" title="Edit">${IE}</button><button class="ib" data-a="x" data-i="${i}" aria-label="Delete" title="Delete">${ID}</button></li>`).join('');
