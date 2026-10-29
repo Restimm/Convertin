@@ -1,5 +1,5 @@
-const V='convertin-v1';
-const SHELL=['./','index.html','manifest.json','logo.jpg','icon-192.png','icon-512.png'];
+const V='convertin-v2';
+const SHELL=['./','index.html','manifest.json','icon-192.png','icon-512.png'];
 const HOSTS=['cdn.tailwindcss.com','cdnjs.cloudflare.com','fonts.googleapis.com','fonts.gstatic.com','cdn.jsdelivr.net'];
 
 self.addEventListener('install',e=>{
