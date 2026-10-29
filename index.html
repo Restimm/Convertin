@@ -134,8 +134,10 @@ function resample(img,sx,sy,sw,sh,tw,th){
   return c;
 }
 let bgAI;
-const BG_MODEL='onnx-community/BiRefNet_lite-ONNX';
-const UPSCALE_MODEL='https://huggingface.co/anakhiu/realesrgan-onnx/resolve/e2a8b86b2d947b18e024c3975aa13eadcd7751e6/realesrgan_x4plus.onnx';
+const BG_MODEL='BritishWerewolf/U-2-Netp';
+const BG_REVISION='7112208dbac3a3642496c8d54e2f0f9bb3dc1dc8';
+const UPSCALE_GPU_MODEL='https://huggingface.co/vlad-grig/realesr-general-x4v3-onnx/resolve/0e95d93e454cf6b5de9bdf5a1c9e7ec340d38231/onnx/model_fp16.onnx';
+const UPSCALE_CPU_MODEL='https://huggingface.co/vlad-grig/realesr-general-x4v3-onnx/resolve/0e95d93e454cf6b5de9bdf5a1c9e7ec340d38231/onnx/model.onnx';
 let upscaleAI;
 async function loadBgAI(prog){
   if(!bgAI){
@@ -151,16 +153,16 @@ async function loadBgAI(prog){
       let model,device='wasm',dtype='fp32';
       if(navigator.gpu){
         try{
-          device='webgpu';dtype='fp16';
-          model=await AutoModel.from_pretrained(BG_MODEL,{device,dtype,progress_callback:progress});
+          device='webgpu';
+          model=await AutoModel.from_pretrained(BG_MODEL,{device,dtype,revision:BG_REVISION,progress_callback:progress});
         }catch(e){
-          console.warn('BiRefNet WebGPU unavailable; retrying with CPU',e);
+          console.warn('U-2-Netp WebGPU unavailable; retrying with CPU',e);
           prog(null,'Switching to CPU');
           device='wasm';dtype='fp32';
         }
       }
-      if(!model)model=await AutoModel.from_pretrained(BG_MODEL,{device,dtype,progress_callback:progress});
-      const processor=await AutoProcessor.from_pretrained(BG_MODEL,{progress_callback:progress});
+      if(!model)model=await AutoModel.from_pretrained(BG_MODEL,{device,dtype,revision:BG_REVISION,progress_callback:progress});
+      const processor=await AutoProcessor.from_pretrained(BG_MODEL,{revision:BG_REVISION,progress_callback:progress});
       return{AutoModel,AutoProcessor,RawImage,model,processor,device,progress};
     })().catch(e=>{bgAI=null;throw e});
   }
@@ -171,36 +173,46 @@ async function loadUpscaleAI(prog){
     upscaleAI=(async()=>{
       const ort=await import('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/+esm');
       ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
-      prog(5,'Loading AI upscaler');
-      const response=await fetch(UPSCALE_MODEL);
-      if(!response.ok)throw new Error(`Could not download Real-ESRGAN model (${response.status})`);
-      const total=Number(response.headers.get('content-length'))||0,reader=response.body?.getReader(),chunks=[];
-      let bytes=total?new Uint8Array(total):null,size=0;
-      if(reader){
-        while(true){
-          const part=await reader.read();if(part.done)break;
-          if(bytes)bytes.set(part.value,size);else chunks.push(part.value);
-          size+=part.value.length;
-          if(total)prog(Math.min(34,5+Math.round(size/total*29)),'Downloading Real-ESRGAN');
+      const fetchModel=async(url,start,end,label)=>{
+        const response=await fetch(url);
+        if(!response.ok)throw new Error(`Could not download ${label} (${response.status})`);
+        const total=Number(response.headers.get('content-length'))||0,reader=response.body?.getReader(),chunks=[];
+        let bytes=total?new Uint8Array(total):null,size=0;
+        if(reader){
+          while(true){
+            const part=await reader.read();if(part.done)break;
+            if(bytes)bytes.set(part.value,size);else chunks.push(part.value);
+            size+=part.value.length;
+            if(total)prog(Math.min(end,start+Math.round(size/total*(end-start))),`Downloading ${label}`);
+          }
+        }else{
+          bytes=new Uint8Array(await response.arrayBuffer());size=bytes.length;
         }
-      }else{
-        bytes=new Uint8Array(await response.arrayBuffer());size=bytes.length;
-      }
-      if(bytes&&size!==bytes.length)bytes=bytes.slice(0,size);
-      if(!bytes){
-        bytes=new Uint8Array(size);let offset=0;
-        for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length}
-      }
-      prog(36,'Preparing AI upscaler');
-      let session,provider='wasm';
+        if(bytes&&size!==bytes.length)bytes=bytes.slice(0,size);
+        if(!bytes){
+          bytes=new Uint8Array(size);let offset=0;
+          for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length}
+        }
+        return bytes;
+      };
+      prog(5,'Loading fast AI upscaler');
+      let session,provider='wasm',bytes,cpuBytes=null;
       if(navigator.gpu){
         try{
+          bytes=await fetchModel(UPSCALE_GPU_MODEL,6,26,'Real-ESRGAN');
+          prog(28,'Preparing AI upscaler');
           session=await ort.InferenceSession.create(bytes,{executionProviders:['webgpu'],graphOptimizationLevel:'all'});
           provider='webgpu';
-        }catch(e){console.warn('Real-ESRGAN WebGPU unavailable; using CPU',e)}
+        }catch(e){
+          console.warn('Real-ESRGAN WebGPU unavailable; using CPU',e);
+          prog(null,'Switching to CPU');
+          cpuBytes=await fetchModel(UPSCALE_CPU_MODEL,6,26,'CPU upscaler');
+        }
+      }else{
+        cpuBytes=await fetchModel(UPSCALE_CPU_MODEL,6,26,'CPU upscaler');
       }
-      if(!session)session=await ort.InferenceSession.create(bytes,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
-      return{ort,bytes,session,provider};
+      if(!session)session=await ort.InferenceSession.create(cpuBytes,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
+      return{ort,bytes:provider==='webgpu'?bytes:null,cpuBytes,session,provider};
     })().catch(e=>{upscaleAI=null;throw e});
   }
   return upscaleAI;
@@ -209,10 +221,15 @@ async function runUpscaleTile(engine,input,w,h){
   const feeds={[engine.session.inputNames[0]]:new engine.ort.Tensor('float32',input,[1,3,h,w])};
   try{return await engine.session.run(feeds)}
   catch(e){
-    if(engine.provider!=='webgpu'||!engine.bytes)throw e;
+    if(engine.provider!=='webgpu')throw e;
     console.warn('Real-ESRGAN WebGPU inference failed; retrying with CPU',e);
-    engine.session=await engine.ort.InferenceSession.create(engine.bytes,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
-    engine.provider='wasm';
+    engine.cpuBytes??=await (async()=>{
+      const response=await fetch(UPSCALE_CPU_MODEL);
+      if(!response.ok)throw new Error(`Could not download CPU upscaler (${response.status})`);
+      return new Uint8Array(await response.arrayBuffer());
+    })();
+    engine.session=await engine.ort.InferenceSession.create(engine.cpuBytes,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
+    engine.provider='wasm';engine.bytes=null;
     const retryFeeds={[engine.session.inputNames[0]]:new engine.ort.Tensor('float32',input,[1,3,h,w])};
     return engine.session.run(retryFeeds);
   }
@@ -262,23 +279,23 @@ const T=[
   }},
  {id:'removebg',n:'Remove Background',btn:'Remove Background',ctl:'',
   async fn(img,f,prog){
-    prog(null,'Loading BiRefNet');
+    prog(null,'Loading lightweight AI model');
     const ai=await loadBgAI(prog),W=img.naturalWidth,H=img.naturalHeight;
-    const source=await ai.RawImage.fromBlob(f),{pixel_values}=await ai.processor(source);
+    const source=await ai.RawImage.fromBlob(f),modelInput=await source.resize(320,320),{pixel_values}=await ai.processor(modelInput);
     prog(null,'Detecting foreground');
-    let output_image;
-    try{({output_image}=await ai.model({input_image:pixel_values}))}
+    let maskOutput;
+    try{({mask:maskOutput}=await ai.model({input:pixel_values}))}
     catch(e){
       if(ai.device!=='webgpu')throw e;
-      console.warn('BiRefNet WebGPU inference failed; retrying with CPU',e);
+      console.warn('U-2-Netp WebGPU inference failed; retrying with CPU',e);
       prog(null,'Switching to CPU');
-      ai.model=await ai.AutoModel.from_pretrained(BG_MODEL,{device:'wasm',dtype:'fp32',progress_callback:ai.progress});
+      ai.model=await ai.AutoModel.from_pretrained(BG_MODEL,{device:'wasm',dtype:'fp32',revision:BG_REVISION,progress_callback:ai.progress});
       ai.device='wasm';
-      ({output_image}=await ai.model({input_image:pixel_values}));
+      ({mask:maskOutput}=await ai.model({input:pixel_values}));
     }
-    const prediction=output_image[0].sigmoid().mul(255).to('uint8'),dims=prediction.dims;
-    const mh=dims[dims.length-2],mw=dims[dims.length-1],values=prediction.data;
-    if(values.length!==mw*mh)throw new Error('BiRefNet returned an unsupported mask');
+    if(!maskOutput)throw new Error('U-2-Netp did not return a foreground mask');
+    const dims=maskOutput.dims,mh=dims[dims.length-2],mw=dims[dims.length-1],values=maskOutput.data;
+    if(values.length!==mw*mh)throw new Error('U-2-Netp returned an unsupported mask');
     const mask=cvs(mw,mh),md=new Uint8ClampedArray(mw*mh*4);
     for(let i=0,j=0;i<values.length;i++,j+=4){md[j]=md[j+1]=md[j+2]=255;md[j+3]=values[i]}
     mask.getContext('2d').putImageData(new ImageData(md,mw,mh),0,0);
@@ -294,7 +311,7 @@ const T=[
     const tw=Math.round(W*s),th=Math.round(H*s),engine=await loadUpscaleAI(prog);
     const input=draw(img).getContext('2d'),output=cvs(tw,th),outCtx=output.getContext('2d');
     outCtx.imageSmoothingEnabled=true;outCtx.imageSmoothingQuality='high';
-    const tile=192,overlap=16,total=Math.ceil(W/tile)*Math.ceil(H/tile);let done=0;
+    const tile=256,overlap=16,total=Math.ceil(W/tile)*Math.ceil(H/tile);let done=0;
     for(let y=0;y<H;y+=tile)for(let x=0;x<W;x+=tile){
       const sx=Math.max(0,x-overlap),sy=Math.max(0,y-overlap),ex=Math.min(W,x+tile+overlap),ey=Math.min(H,y+tile+overlap),iw=ex-sx,ih=ey-sy;
       const pixels=input.getImageData(sx,sy,iw,ih).data,plane=new Float32Array(iw*ih*3);
