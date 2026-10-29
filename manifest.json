@@ -1,18 +1,18 @@
 {
-  "background_color": "#ffffff",
+  "background_color": "#0b0a0a",
   "dir": "ltr",
   "display": "standalone",
-  "name": "convertin-woy.vercel",
+  "name": "Convertin By Restimm",
   "orientation": "any",
   "scope": "/",
-  "short_name": "convertin-woy.vercel",
-  "start_url": "/",
-  "theme_color": "#ffffff",
+  "short_name": "Convertin",
+  "start_url": "https://convertin-woy.vercel.app/",
+  "theme_color": "#010101",
   "icons": [
     {
-      "src": "https://convertin-woy.vercel.app/logo.jpg",
-      "type": "image/webp",
-      "sizes": "2816x1536",
+      "src": "logo.jpg",
+      "type": "image",
+      "sizes": "512x512",
       "isSquare": false,
       "isPng": false,
       "isWebp": true,
@@ -22,5 +22,7 @@
       "is256x256": false,
       "is192x192": false
     }
-  ]
+  ],
+  "id": "com.restimm.restify",
+  "description": "Apk untuk kebuthan sehari hari"
 }
