@@ -1,21 +1,39 @@
 {
-  "background_color": "#ffffff",
-  "dir": "ltr",
+  "name": "Convertin",
+  "short_name": "Convertin",
+  "description": "Convert, compress, resize, upscale, remove background, and turn images into PDF.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "name": "convertin By Restimm",
   "orientation": "any",
-  "scope": "/",
-  "short_name": "convertin",
-  "start_url": "/",
-  "theme_color": "#ffffff",
-  "id": "https://convertin-woy.vercel.app/",
-  "description": "Apk untuk kebutuhan sehari hari",
+  "background_color": "#030306",
+  "theme_color": "#030306",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "utilities",
+    "productivity",
+    "photo"
+  ],
   "icons": [
     {
-      "src": "logo.png",
+      "src": "icon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
