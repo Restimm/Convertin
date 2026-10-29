@@ -100,6 +100,15 @@ const loadImg=f=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i)
 const draw=(img,bg,w=img.naturalWidth,h=img.naturalHeight)=>{const c=cvs(w,h),x=c.getContext('2d');x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';if(bg){x.fillStyle=bg;x.fillRect(0,0,w,h)}x.drawImage(img,0,0,w,h);return c};
 let tt;const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3600)};
 const fld=(l,h,c='')=>`<div class="fld ${c}"><span class="lbl">${l}</span>${h}</div>`;
+const WV=/;\s*wv\)/.test(navigator.userAgent);
+async function saveFile(blob,name){
+  if(WV&&navigator.canShare){
+    try{const f=new File([blob],name,{type:blob.type});if(navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}
+    catch(e){if(e.name==='AbortError')return}
+  }
+  const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),4000);
+}
 const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
 const DZ='Drop image or click to upload';
 const SV='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
@@ -349,6 +358,7 @@ T.forEach(t=>{
     finally{if(k===st.n){clearTimeout(st.lt);load.hidden=true;if(run)run.disabled=false}}
   };
   t.go=go;
+  dl.addEventListener('click',async e=>{if(!WV)return;e.preventDefault();try{await saveFile(await (await fetch(dl.href)).blob(),dl.download)}catch(x){toast('Download failed')}});
   dropzone(id,async fs=>{
     const f=fs.find(x=>x.type.startsWith('image/'));if(!f)return toast('Select an image file');
     let im;try{im=await loadImg(f)}catch(e){return toast(e.message)}
@@ -430,7 +440,7 @@ $('#pdf-go').onclick=async()=>{
       doc.addImage(c.toDataURL('image/jpeg',.92),'JPEG',(W-w)/2,(H-h)/2,w,h,undefined,'FAST');
     }
     sp(n,'Saving');await nextFrame();
-    doc.save('convertin.pdf');
+    await saveFile(doc.output('blob'),'convertin.pdf');
   }catch(e){toast(e.message||'PDF failed')}
   setTimeout(()=>pg.hidden=true,900);
   btn.textContent='Create PDF';btn.disabled=!P.length;
