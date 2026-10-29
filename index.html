@@ -58,6 +58,7 @@ input[type=range]{accent-color:#818cf8;width:100%;height:28px}
 .rw{position:relative;width:72px;height:72px}
 .rw svg{width:100%;height:100%;transform:rotate(-90deg)}
 .rw circle{fill:none;stroke-width:3.5;stroke-linecap:round}
+.rw:after{content:"";position:absolute;top:2px;left:calc(50% - 3px);width:6px;height:6px;border-radius:50%;background:#67e8f9;box-shadow:0 0 10px #22d3ee;transform-origin:3px 34px;animation:spin 1.4s linear infinite}
 .rt{stroke:#1c2147}
 .rf{stroke:url(#g);stroke-dasharray:100;stroke-dashoffset:100;transition:stroke-dashoffset .3s ease;transform-box:fill-box;transform-origin:center}
 .ind .rf{stroke-dasharray:28 72;stroke-dashoffset:0;transition:none;animation:spin 1s linear infinite}
@@ -72,7 +73,7 @@ input[type=range]{accent-color:#818cf8;width:100%;height:28px}
 #p-resize[data-m=crop] #resize-b{cursor:grab;touch-action:none;user-select:none}
 #p-resize[data-m=crop] #resize-b:active{cursor:grabbing}
 :is(button,select,input,label,a):focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
-@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.ind .rf{stroke-dasharray:28 72;stroke-dashoffset:0}}
 </style>
 </head>
 <body>
@@ -276,17 +277,15 @@ const T=[
   }},
  {id:'removebg',n:'Remove Background',btn:'Remove Background',ctl:'',
   async fn(img,f,prog){
-    prog(null,'Loading engine');
+    prog(null,'Loading AI model');
     bgLib??=await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm');
     const m={};let top=0;
-    const out=await bgLib.removeBackground(f,{model:'isnet',output:{format:'image/png',quality:1},
+    const out=await bgLib.removeBackground(f,{model:'isnet_fp16',output:{format:'image/png',quality:1},
       progress:(k,c,t)=>{if(!t)return;m[k]=c/t;const v=Object.entries(m),fe=v.filter(e=>e[0].startsWith('fetch')).map(e=>e[1]),ce=v.filter(e=>!e[0].startsWith('fetch')).map(e=>e[1]);
         const p=Math.round(55*(fe.length?fe.reduce((a,b)=>a+b)/fe.length:1)+40*Math.min(1,ce.reduce((a,b)=>a+b,0)/4));
         top=Math.max(top,Math.min(p,94));prog(top,top<55?'Downloading model':'Removing background')}});
     prog(96,'Finishing');await nextFrame();
-    const W=img.naturalWidth,H=img.naturalHeight,mask=draw(await loadImg(out),null,W,H),c=draw(img);
-    const x=c.getContext('2d');x.globalCompositeOperation='destination-in';x.drawImage(mask,0,0);
-    return{b:await toBlob(c,'image/png'),w:W,h:H,name:base(f)+'-nobg.png'};
+    return{b:out,w:img.naturalWidth,h:img.naturalHeight,name:base(f)+'-nobg.png'};
   }},
  {id:'upscale',n:'Upscale',btn:'Upscale',
   ctl:fld('Scale',`<select id="upscale-s"><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select>`),
