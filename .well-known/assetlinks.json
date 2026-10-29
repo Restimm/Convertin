@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.restimm.app",
+        "sha256_cert_fingerprints": ["79:F6:73:D4:91:D3:2C:79:F1:19:EE:DC:7F:DA:29:09:9C:0B:21:85:0A:A9:94:A3:6A:52:69:4A:0D:57:97:72"]
+      }
+    }]
