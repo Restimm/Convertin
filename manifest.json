@@ -1,13 +1,13 @@
 {
-  "background_color": "#000000",
+  "background_color": "#ffffff",
   "dir": "ltr",
   "display": "standalone",
-  "name": "Convertin By Restimm",
+  "name": "convertin-woy.vercel",
   "orientation": "any",
   "scope": "/",
-  "short_name": "Convertin",
+  "short_name": "convertin-woy.vercel",
   "start_url": "/",
-  "theme_color": "#1f1f1f",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "https://convertin-woy.vercel.app/logo.jpg",
@@ -22,7 +22,5 @@
       "is256x256": false,
       "is192x192": false
     }
-  ],
-  "id": "/?source=pwa",
-  "description": "Aplikasi konversi praktis dan cepat buatan Restimm."
+  ]
 }
